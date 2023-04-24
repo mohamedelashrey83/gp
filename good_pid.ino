@@ -113,21 +113,21 @@ void setup() {
 }
 
 void loop() {
- /* forward();
+   /*forward();
   float us = 0.0;
   bool b = false;
   us = read_front();
-  Serial.println(us);  
+  Serial.println(us);
   if (us < 15) {
   Stop();
   delay(2000);
-  rotate(-85);
+  rotate(-88);
   Stop();
   delay(2000);
   move_dist(22,22);
   Stop();
   delay(2000);
-  rotate(85);
+  rotate(-88);
   Stop();
   delay(2000);
   }*/
@@ -147,7 +147,6 @@ void setMotor(int dir, int pwmVal, int pwm, int in1, int in2) {
     digitalWrite(in2, LOW);
   }
 }
-
 template<int j>
 void readEncoder() {
   int b = digitalRead(encb[j]);
@@ -162,7 +161,7 @@ void move_dist(int d1, int d2) {
   pid[0].setParams(3, 0.2, 0, 255);
   pid[1].setParams(3, 0.2, 0, 255);
   int target[NMOTORS];
-  target[0] = round(d1 * 16.552); //390 tick per revolution
+  target[0] = round(d1 * 16.552);  //390 tick per revolution
   target[1] = round(d2 * 16.552);
   posi[0] = 0;
   posi[1] = 0;
@@ -177,6 +176,10 @@ void move_dist(int d1, int d2) {
       for (int k = 0; k < NMOTORS; k++) {
         pos[k] = posi[k];
       }
+    }
+    if ((abs(pos[0]) >= abs(target[0])) && (abs(pos[1]) >= abs(target[1]))) {
+      Stop();
+      break;
     }
     // evaluate the control signal
     for (int k = 0; k < NMOTORS; k++) {
@@ -194,9 +197,7 @@ void move_dist(int d1, int d2) {
       Serial.print(" ");
     }
     Serial.println();
-    if ((abs(pos[0]) >= abs(target[0])) && (abs(pos[1]) >= abs(target[1]))) {
-      break;
-    }
+    
   }
   delay(300);
 }
@@ -277,12 +278,13 @@ void left() {
 }
 
 void Stop() {
+  analogWrite(pwm[0], 0);
+  analogWrite(pwm[1], 0);
   digitalWrite(in1[0], LOW);
   digitalWrite(in2[0], LOW);
   digitalWrite(in1[1], LOW);
   digitalWrite(in2[1], LOW);
-  analogWrite(pwm[0], 0);
-  analogWrite(pwm[1], 0);
+ 
 }
 bool has_reached() {
   int prev_posi[2];
@@ -300,7 +302,7 @@ void calculate_IMU_error() {
   // We can call this funtion in the setup section to calculate the accelerometer and gyro data error. From here we will get the error values used in the above equations printed on the Serial Monitor.
   // Note that we should place the IMU flat in order to get the proper values, so that we then can the correct values
   // Read accelerometer values 200 times
-  while (c < 1000) {
+  /*while (c < 1000) {
     Wire.beginTransmission(MPU);
     Wire.write(0x3B);
     Wire.endTransmission(false);
@@ -312,10 +314,10 @@ void calculate_IMU_error() {
     AccErrorX = AccErrorX + ((atan((AccY) / sqrt(pow((AccX), 2) + pow((AccZ), 2))) * 180 / PI));
     AccErrorY = AccErrorY + ((atan(-1 * (AccX) / sqrt(pow((AccY), 2) + pow((AccZ), 2))) * 180 / PI));
     c++;
-  }
+  }*/
   //Divide the sum by 200 to get the error value
-  AccErrorX = AccErrorX / 1000;
-  AccErrorY = AccErrorY / 1000;
+  /*AccErrorX = AccErrorX / 1000;
+  AccErrorY = AccErrorY / 1000;*/
   c = 0;
   // Read gyro values 200 times
   while (c < 1000) {
@@ -349,86 +351,43 @@ void calculate_IMU_error() {
   Serial.println(GyroErrorZ);*/
 }
 void rotate(float angle) {
-  pid[0].setParams(7, 0.4, 0.01, 150);
-  pid[1].setParams(7, 0.4, 0.01, 150);
+  pid[0].setParams(12, 5, 4, 255);
+  pid[1].setParams(12, 5, 4, 255);
   float target = angle;
-  yaw =0;
-  GyroErrorZ =0;
+  yaw = 0;
+  GyroErrorZ = 0;
   calculate_IMU_error();
-  ///////////////////////////
-
   while (1) {
-    /* Wire.beginTransmission(MPU);
-    Wire.write(0x3B);  // Start with register 0x3B (ACCEL_XOUT_H)
-    Wire.endTransmission(false);
-    Wire.requestFrom(MPU, 6, true);  // Read 6 registers total, each axis value is stored in 2 registers
-    //For a range of +-2g, we need to divide the raw values by 16384, according to the datasheet
-    AccX = (Wire.read() << 8 | Wire.read()) / 16384.0;  // X-axis value
-    AccY = (Wire.read() << 8 | Wire.read()) / 16384.0;  // Y-axis value
-    AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0;  // Z-axis value
-    // Calculating Roll and Pitch from the accelerometer data
-    accAngleX = (atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) * 180 / PI) - AccErrorX;       // ~(0.58) See the calculate_IMU_error()custom function for more details
-    accAngleY = (atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) * 180 / PI) - AccErrorY;  // ~(-1.58)
-    // === Read gyroscope data === //*/
-    previousTime = currentTime;                         // Previous time is stored before the actual time read
-    currentTime = millis();                             // Current time actual time read
-    elapsedTime = (currentTime - previousTime) / 1000;  // Divide by 1000 to get seconds
-    Wire.beginTransmission(MPU);
-    Wire.write(0x43);  // Gyro data first register address 0x43
-    Wire.endTransmission(false);
-    Wire.requestFrom(MPU, 6, true);                    // Read 4 registers total, each axis value is stored in 2 registers
-    GyroX = (Wire.read() << 8 | Wire.read()) / 131.0;  // For a 250deg/s range we have to divide first the raw value by 131.0, according to the datasheet
-    GyroY = (Wire.read() << 8 | Wire.read()) / 131.0;
-    GyroZ = (Wire.read() << 8 | Wire.read()) / 131.0;
-    // Correct the outputs with the calculated error values
-    // GyroX = GyroX - GyroErrorX;    //~(-0.56)
-    //GyroY = GyroY - GyroErrorY;    //~(2)
-    GyroZ = GyroZ - (GyroErrorZ);  //~ (-0.8)
-    // Currently the raw values are in degrees per seconds, deg/s, so we need to multiply by sendonds (s) to get the angle in degrees
-    //gyroAngleX = gyroAngleX + GyroX * elapsedTime;  // deg/s * s = deg
-    //gyroAngleY = gyroAngleY + GyroY * elapsedTime;
-    yaw = yaw + GyroZ * elapsedTime;
-    // Complementary filter - combine acceleromter and gyro angle values
-    //roll = 0.96 * gyroAngleX + 0.04 * accAngleX;
-    //pitch = 0.96 * gyroAngleY + 0.04 * accAngleY;
+    readYaw();
     if (abs(yaw) >= abs(target)) {
-      break;
       Stop();
+      break;
     }
     long currT = micros();
     float deltaT = ((float)(currT - prevT)) / (1.0e6);
     prevT = currT;
-    // evaluate the control signal
-    // for (int k = 0; k < NMOTORS; k++) {
     int pwr[2], dir[2];
-    // evaluate the control signal
-    pid[0].evalu(yaw, target, deltaT, pwr[0], dir[0]);
-    pwr[0] = constrain(pwr[0], 120, 150);
-    // signal the motor
-    setMotor(dir[0], pwr[0], pwm[0], in1[0], in2[0]);
-    setMotor(-dir[0], pwr[0], pwm[1], in1[1], in2[1]);
-
-    /*pid[1].evalu(yaw, -target, deltaT, pwr[1], dir[1]);
-    pwr[1] = constrain(pwr[1], 120, 255);
-    // signal the motor
-    setMotor(dir[1], pwr[1], pwm[1], in1[1], in2[1]);*/
-    //}
-    //for (int k = 0; k < NMOTORS; k++) {
+    pid[1].evalu(yaw, target, deltaT, pwr[1], dir[1]);
+    pwr[1] = constrain(pwr[0], 120, 255);
+    setMotor(dir[1], pwr[1], pwm[1], in1[1], in2[1]);
+    setMotor(-dir[1], pwr[1], pwm[0], in1[0], in2[0]);
+    //pid[1].evalu(yaw, target, deltaT, pwr[1], dir[1]);
+    //pwr[1] = constrain(pwr[1], 120, 255);
+    //setMotor(dir[1], pwr[1], pwm[1], in1[1], in2[1]);
     Serial.print(target);
     Serial.print(" ");
     Serial.print(yaw);
     Serial.print(" ");
-    //}
     Serial.println();
-
-    // Print the values on the serial monitor
-    /* Serial.print(roll);
-    Serial.print("/");
-    Serial.print(pitch);
-    Serial.print("/");
-    Serial.println(yaw);*/
   }
-  Stop();
+  readYaw();
+  Serial.print(target);
+  Serial.print(" ");
+  Serial.print(yaw);
+  Serial.print(" ");
+  Serial.println();
+}
+void readYaw() {
   previousTime = currentTime;                         // Previous time is stored before the actual time read
   currentTime = millis();                             // Current time actual time read
   elapsedTime = (currentTime - previousTime) / 1000;  // Divide by 1000 to get seconds
@@ -441,11 +400,45 @@ void rotate(float angle) {
   GyroZ = (Wire.read() << 8 | Wire.read()) / 131.0;
   GyroZ = GyroZ - (GyroErrorZ);  //~ (-0.8)
   yaw = yaw + GyroZ * elapsedTime;
-
-  Serial.print(target);
-  Serial.print(" ");
-  Serial.print(yaw);
-  Serial.print(" ");
-  //}
-  Serial.println();
+}
+void readMPU() {
+  /* Wire.beginTransmission(MPU);
+    Wire.write(0x3B);  // Start with register 0x3B (ACCEL_XOUT_H)
+    Wire.endTransmission(false);
+    Wire.requestFrom(MPU, 6, true);  // Read 6 registers total, each axis value is stored in 2 registers
+    //For a range of +-2g, we need to divide the raw values by 16384, according to the datasheet
+    AccX = (Wire.read() << 8 | Wire.read()) / 16384.0;  // X-axis value
+    AccY = (Wire.read() << 8 | Wire.read()) / 16384.0;  // Y-axis value
+    AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0;  // Z-axis value
+    // Calculating Roll and Pitch from the accelerometer data
+    accAngleX = (atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) * 180 / PI) - AccErrorX;       // ~(0.58) See the calculate_IMU_error()custom function for more details
+    accAngleY = (atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) * 180 / PI) - AccErrorY;  // ~(-1.58)
+    // === Read gyroscope data === //*/
+  previousTime = currentTime;                         // Previous time is stored before the actual time read
+  currentTime = millis();                             // Current time actual time read
+  elapsedTime = (currentTime - previousTime) / 1000;  // Divide by 1000 to get seconds
+  Wire.beginTransmission(MPU);
+  Wire.write(0x43);  // Gyro data first register address 0x43
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU, 6, true);                    // Read 4 registers total, each axis value is stored in 2 registers
+  GyroX = (Wire.read() << 8 | Wire.read()) / 131.0;  // For a 250deg/s range we have to divide first the raw value by 131.0, according to the datasheet
+  GyroY = (Wire.read() << 8 | Wire.read()) / 131.0;
+  GyroZ = (Wire.read() << 8 | Wire.read()) / 131.0;
+  // Correct the outputs with the calculated error values
+  // GyroX = GyroX - GyroErrorX;    //~(-0.56)
+  //GyroY = GyroY - GyroErrorY;    //~(2)
+  GyroZ = GyroZ - (GyroErrorZ);  //~ (-0.8)
+  // Currently the raw values are in degrees per seconds, deg/s, so we need to multiply by sendonds (s) to get the angle in degrees
+  //gyroAngleX = gyroAngleX + GyroX * elapsedTime;  // deg/s * s = deg
+  //gyroAngleY = gyroAngleY + GyroY * elapsedTime;
+  yaw = yaw + GyroZ * elapsedTime;
+  // Complementary filter - combine acceleromter and gyro angle values
+  //roll = 0.96 * gyroAngleX + 0.04 * accAngleX;
+  //pitch = 0.96 * gyroAngleY + 0.04 * accAngleY;
+  // Print the values on the serial monitor
+  /* Serial.print(roll);
+    Serial.print("/");
+    Serial.print(pitch);
+    Serial.print("/");
+    Serial.println(yaw);*/
 }
