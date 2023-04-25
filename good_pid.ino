@@ -103,7 +103,7 @@ void INIT() {
 void setup() {
   INIT();
   //calculate_IMU_error();
-  rotate(90.0);
+  //rotate(90.0);
   //Stop();
   //move_dist(10,10);
   //move_single_motor(0,22);
@@ -113,7 +113,7 @@ void setup() {
 }
 
 void loop() {
-   /*forward();
+  /*forward();
   float us = 0.0;
   bool b = false;
   us = read_front();
@@ -132,8 +132,8 @@ void loop() {
   delay(2000);
   }*/
   /* Get new sensor events with the readings */
+  is_static();
 }
-
 void setMotor(int dir, int pwmVal, int pwm, int in1, int in2) {
   analogWrite(pwm, pwmVal);
   if (dir == 1) {
@@ -197,7 +197,6 @@ void move_dist(int d1, int d2) {
       Serial.print(" ");
     }
     Serial.println();
-    
   }
   delay(300);
 }
@@ -284,7 +283,6 @@ void Stop() {
   digitalWrite(in2[0], LOW);
   digitalWrite(in1[1], LOW);
   digitalWrite(in2[1], LOW);
- 
 }
 bool has_reached() {
   int prev_posi[2];
@@ -302,7 +300,7 @@ void calculate_IMU_error() {
   // We can call this funtion in the setup section to calculate the accelerometer and gyro data error. From here we will get the error values used in the above equations printed on the Serial Monitor.
   // Note that we should place the IMU flat in order to get the proper values, so that we then can the correct values
   // Read accelerometer values 200 times
-  /*while (c < 1000) {
+  /* while (c < 1000) {
     Wire.beginTransmission(MPU);
     Wire.write(0x3B);
     Wire.endTransmission(false);
@@ -441,4 +439,27 @@ void readMPU() {
     Serial.print(pitch);
     Serial.print("/");
     Serial.println(yaw);*/
+}
+void readAccel() {
+  Wire.beginTransmission(MPU);
+  Wire.write(0x3B);  // Start with register 0x3B (ACCEL_XOUT_H)
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU, 6, true);  // Read 6 registers total, each axis value is stored in 2 registers
+  //For a range of +-2g, we need to divide the raw values by 16384, according to the datasheet
+  AccX = (Wire.read() << 8 | Wire.read()) / 16384.0;  // X-axis value
+  AccY = (Wire.read() << 8 | Wire.read()) / 16384.0;  // Y-axis value
+  AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0;  // Z-axis value
+}
+bool is_static() {
+  readAccel();
+  AccX = abs(AccX - 0.5);
+  AccY = abs(AccY + 0.05);
+  AccZ = abs(AccZ + 1);
+  if (AccX < 0.02 || AccY < 0.02 || AccZ < 0.02) {
+    Serial.println("the robot is static .. ");
+    return true;
+  } else if (AccX > 0.02 || AccY > 0.02 || AccZ > 0.02) {
+    Serial.println("robot is moving .. ");
+    return false;
+  }
 }
