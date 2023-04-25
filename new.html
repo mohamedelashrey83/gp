@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ROOMBA</title>
+    <style>
+        html {
+            font-family: Helvetica;
+            display: inline-block;
+            margin: 0px auto;
+            text-align: center;
+        }
+
+        body {
+            margin-top: 50px;
+        }
+
+        h1 {
+            color: #4717d7;
+            margin: 50px auto 30px;
+            font-family: 'Times New Roman', Times, serif;
+        }
+
+        h3 {
+            color: black;
+            margin: auto;
+        }
+
+        .button {
+            display: block;
+            width: 80px;
+            background-color: #3498db;
+            border: none;
+            color: white;
+            padding: 13px 30px;
+            text-decoration: none;
+            font-size: 25px;
+            margin: 0px auto 35px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .button-on {
+            background-color: #3498db;
+        }
+
+        .button-on:active {
+            background-color: #2980b9;
+        }
+
+        .button-off {
+            background-color: #34495e;
+        }
+
+        .button-off:active {
+            background-color: #2c3e50;
+        }
+
+        p {
+            font-size: 16px;
+            color: #911515;
+            margin-bottom: 10px;
+        }
+
+        .container {
+            display: flex;
+            justify-content: baseline;
+            align-items: center;
+            height: 20vh;
+        }
+
+        button {
+            background-color: rgba(22, 213, 22, 0.6);
+            border: #000;
+            color: #000;
+            padding: 12px 24px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 50px;
+            margin: 10px 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>control of vrc</h3>
+    <p>Robot Status:on</p>
+    <a class="button button-off" href="/off">OFF</a>
+    <a class="button button-on" href="/on">ON</a>
+
+
+    <a href="/forward">
+        <button class="up">&#8593;</button>
+    </a>
+    <div>
+        <a href="/left">
+            <button class="left">&#8592;</button>
+        </a>
+        <a href="/right">
+            <button class="right">&#8594;</button>
+        </a>
+    </div>
+    <a href="/back">
+        <button class="down">&#8595;</button>
+    </a>
+
+
+</body>
+
+</html>
