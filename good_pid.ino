@@ -1,9 +1,7 @@
 #include <util/atomic.h>
 #include <HCSR04.h>
 #include <Wire.h>
-// A class to compute the control signal
 volatile float distance_front, distance_left, distance_right;
-
 const int MPU = 0x68;  // MPU6050 I2C address
 float AccX, AccY, AccZ;
 float GyroX, GyroY, GyroZ;
@@ -12,7 +10,24 @@ float roll, pitch, yaw;
 float AccErrorX, AccErrorY, GyroErrorX, GyroErrorY, GyroErrorZ;
 float elapsedTime, currentTime, previousTime;
 int c = 0;
-
+// How many motors
+#define NMOTORS 2
+// Pins
+const int enca[] = { 18, 19 };
+const int encb[] = { 17, 2 };
+const int pwm[] = { 6, 13 };
+const int in1[] = { 4, 12 };
+const int in2[] = { 5, 11 };
+int trigger_front = A0;
+int echo_front = A1;
+UltraSonicDistanceSensor frontSensor(trigger_front, echo_front);
+// Globals
+long prevT = 0;
+volatile int posi[] = { 0, 0 };
+typedef enum { RIGHT,
+               LEFT } dir;
+dir d = RIGHT;
+// A class to compute the control signal
 class SimplePID {
 private:
   float kp, kd, ki, umax;  // Parameters
@@ -63,20 +78,7 @@ public:
   }
 };
 
-// How many motors
-#define NMOTORS 2
-// Pins
-const int enca[] = { 18, 19 };
-const int encb[] = { 17, 2 };
-const int pwm[] = { 6, 13 };
-const int in1[] = { 4, 12 };
-const int in2[] = { 5, 11 };
-int trigger_front = A0;
-int echo_front = A1;
-UltraSonicDistanceSensor frontSensor(trigger_front, echo_front);
-// Globals
-long prevT = 0;
-volatile int posi[] = { 0, 0 };
+
 // PID class instances
 SimplePID pid[NMOTORS];
 
@@ -102,8 +104,9 @@ void INIT() {
 
 void setup() {
   INIT();
-  //calculate_IMU_error();
-  //rotate(90.0);
+  gyro_sensitivity(0x10);
+  rotate(90.0);
+  //rotate_right();
   //Stop();
   //move_dist(10,10);
   //move_single_motor(0,22);
@@ -113,26 +116,9 @@ void setup() {
 }
 
 void loop() {
-  /*forward();
-  float us = 0.0;
-  bool b = false;
-  us = read_front();
-  Serial.println(us);
-  if (us < 15) {
-  Stop();
-  delay(2000);
-  rotate(-88);
-  Stop();
-  delay(2000);
-  move_dist(22,22);
-  Stop();
-  delay(2000);
-  rotate(-88);
-  Stop();
-  delay(2000);
-  }*/
-  /* Get new sensor events with the readings */
-  is_static();
+  //zigzag();
+  //forward();
+  //is_static();
 }
 void setMotor(int dir, int pwmVal, int pwm, int in1, int in2) {
   analogWrite(pwm, pwmVal);
@@ -158,6 +144,8 @@ void readEncoder() {
 }
 void move_dist(int d1, int d2) {
   // set target position
+  Stop();
+  delay(500);
   pid[0].setParams(3, 0.2, 0, 255);
   pid[1].setParams(3, 0.2, 0, 255);
   int target[NMOTORS];
@@ -251,6 +239,7 @@ void forward() {
 }
 
 void backward() {
+
   digitalWrite(in1[0], LOW);
   digitalWrite(in2[0], HIGH);
   digitalWrite(in1[1], LOW);
@@ -349,8 +338,8 @@ void calculate_IMU_error() {
   Serial.println(GyroErrorZ);*/
 }
 void rotate(float angle) {
-  pid[0].setParams(12, 5, 4, 255);
-  pid[1].setParams(12, 5, 4, 255);
+  pid[0].setParams(7, 0, 5, 255);
+  pid[1].setParams(7, 0, 5, 255);
   float target = angle;
   yaw = 0;
   GyroErrorZ = 0;
@@ -365,13 +354,13 @@ void rotate(float angle) {
     float deltaT = ((float)(currT - prevT)) / (1.0e6);
     prevT = currT;
     int pwr[2], dir[2];
-    pid[1].evalu(yaw, target, deltaT, pwr[1], dir[1]);
-    pwr[1] = constrain(pwr[0], 120, 255);
+    pid[0].evalu(yaw, target, deltaT, pwr[0], dir[0]);
+    pwr[0] = constrain(pwr[0], 120, 150);
+    setMotor(dir[0], pwr[0], pwm[0], in1[0], in2[0]);
+    //setMotor(-dir[1], pwr[1], pwm[0], in1[0], in2[0]);
+    pid[1].evalu(yaw, -target, deltaT, pwr[1], dir[1]);
+    pwr[1] = constrain(pwr[1], 120, 150);
     setMotor(dir[1], pwr[1], pwm[1], in1[1], in2[1]);
-    setMotor(-dir[1], pwr[1], pwm[0], in1[0], in2[0]);
-    //pid[1].evalu(yaw, target, deltaT, pwr[1], dir[1]);
-    //pwr[1] = constrain(pwr[1], 120, 255);
-    //setMotor(dir[1], pwr[1], pwm[1], in1[1], in2[1]);
     Serial.print(target);
     Serial.print(" ");
     Serial.print(yaw);
@@ -392,26 +381,31 @@ void readYaw() {
   Wire.beginTransmission(MPU);
   Wire.write(0x43);  // Gyro data first register address 0x43
   Wire.endTransmission(false);
-  Wire.requestFrom(MPU, 6, true);                    // Read 4 registers total, each axis value is stored in 2 registers
-  GyroX = (Wire.read() << 8 | Wire.read()) / 131.0;  // For a 250deg/s range we have to divide first the raw value by 131.0, according to the datasheet
-  GyroY = (Wire.read() << 8 | Wire.read()) / 131.0;
-  GyroZ = (Wire.read() << 8 | Wire.read()) / 131.0;
+  Wire.requestFrom(MPU, 6, true);
+  // Read 4 registers total, each axis value is stored in 2 registers
+  /* sensitvity = 16.4 ==>2000
+  sensitvity = 32.8 ==>1000
+  sensitvity = 65.5 ==>500
+  sensitvity = 131.0 ==> 250*/
+  GyroX = (Wire.read() << 8 | Wire.read()) / 32.8;  // For a 250deg/s range we have to divide first the raw value by 131.0, according to the datasheet
+  GyroY = (Wire.read() << 8 | Wire.read()) / 32.8;
+  GyroZ = (Wire.read() << 8 | Wire.read()) / 32.8;
   GyroZ = GyroZ - (GyroErrorZ);  //~ (-0.8)
   yaw = yaw + GyroZ * elapsedTime;
 }
 void readMPU() {
-  /* Wire.beginTransmission(MPU);
-    Wire.write(0x3B);  // Start with register 0x3B (ACCEL_XOUT_H)
-    Wire.endTransmission(false);
-    Wire.requestFrom(MPU, 6, true);  // Read 6 registers total, each axis value is stored in 2 registers
-    //For a range of +-2g, we need to divide the raw values by 16384, according to the datasheet
-    AccX = (Wire.read() << 8 | Wire.read()) / 16384.0;  // X-axis value
-    AccY = (Wire.read() << 8 | Wire.read()) / 16384.0;  // Y-axis value
-    AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0;  // Z-axis value
-    // Calculating Roll and Pitch from the accelerometer data
-    accAngleX = (atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) * 180 / PI) - AccErrorX;       // ~(0.58) See the calculate_IMU_error()custom function for more details
-    accAngleY = (atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) * 180 / PI) - AccErrorY;  // ~(-1.58)
-    // === Read gyroscope data === //*/
+  Wire.beginTransmission(MPU);
+  Wire.write(0x3B);  // Start with register 0x3B (ACCEL_XOUT_H)
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU, 6, true);  // Read 6 registers total, each axis value is stored in 2 registers
+  //For a range of +-2g, we need to divide the raw values by 16384, according to the datasheet
+  AccX = (Wire.read() << 8 | Wire.read()) / 16384.0;  // X-axis value
+  AccY = (Wire.read() << 8 | Wire.read()) / 16384.0;  // Y-axis value
+  AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0;  // Z-axis value
+  // Calculating Roll and Pitch from the accelerometer data
+  accAngleX = (atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) * 180 / PI) - AccErrorX;       // ~(0.58) See the calculate_IMU_error()custom function for more details
+  accAngleY = (atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) * 180 / PI) - AccErrorY;  // ~(-1.58)
+  // === Read gyroscope data === //
   previousTime = currentTime;                         // Previous time is stored before the actual time read
   currentTime = millis();                             // Current time actual time read
   elapsedTime = (currentTime - previousTime) / 1000;  // Divide by 1000 to get seconds
@@ -423,22 +417,22 @@ void readMPU() {
   GyroY = (Wire.read() << 8 | Wire.read()) / 131.0;
   GyroZ = (Wire.read() << 8 | Wire.read()) / 131.0;
   // Correct the outputs with the calculated error values
-  // GyroX = GyroX - GyroErrorX;    //~(-0.56)
-  //GyroY = GyroY - GyroErrorY;    //~(2)
+  GyroX = GyroX - GyroErrorX;    //~(-0.56)
+  GyroY = GyroY - GyroErrorY;    //~(2)
   GyroZ = GyroZ - (GyroErrorZ);  //~ (-0.8)
   // Currently the raw values are in degrees per seconds, deg/s, so we need to multiply by sendonds (s) to get the angle in degrees
-  //gyroAngleX = gyroAngleX + GyroX * elapsedTime;  // deg/s * s = deg
-  //gyroAngleY = gyroAngleY + GyroY * elapsedTime;
+  gyroAngleX = gyroAngleX + GyroX * elapsedTime;  // deg/s * s = deg
+  gyroAngleY = gyroAngleY + GyroY * elapsedTime;
   yaw = yaw + GyroZ * elapsedTime;
   // Complementary filter - combine acceleromter and gyro angle values
-  //roll = 0.96 * gyroAngleX + 0.04 * accAngleX;
-  //pitch = 0.96 * gyroAngleY + 0.04 * accAngleY;
+  roll = 0.96 * gyroAngleX + 0.04 * accAngleX;
+  pitch = 0.96 * gyroAngleY + 0.04 * accAngleY;
   // Print the values on the serial monitor
-  /* Serial.print(roll);
-    Serial.print("/");
-    Serial.print(pitch);
-    Serial.print("/");
-    Serial.println(yaw);*/
+  Serial.print(roll);
+  Serial.print("/");
+  Serial.print(pitch);
+  Serial.print("/");
+  Serial.println(yaw);
 }
 void readAccel() {
   Wire.beginTransmission(MPU);
@@ -462,4 +456,61 @@ bool is_static() {
     Serial.println("robot is moving .. ");
     return false;
   }
+}
+void zigzag() {
+  float us = 0.0;
+  switch (d) {
+    case RIGHT:
+      forward();
+      us = read_front();
+      Serial.println(us);
+      if (us < 20) {
+        rotate_right();
+        move_dist(22, 22);
+        rotate_right();
+        d = LEFT;
+      }
+      break;
+    case LEFT:
+      forward();
+      us = read_front();
+      Serial.println(us);
+      if (us < 20) {
+        rotate_left();
+        move_dist(22, 22);
+        rotate_left();
+        d = RIGHT;
+      }
+      break;
+  }
+}
+void rotate_right() {
+  Stop();
+  delay(1000);
+  rotate(90);
+}
+void rotate_left() {
+  Stop();
+  delay(1000);
+  rotate(-90);
+}
+void gyro_sensitivity(uint8_t sen) {
+  //0x18 for 2000 deg/s == > sensitvity = 16.4
+  //0x10 for 1000 deg/s == > sensitvity = 32.8
+  //0x08 for 500  deg/s == > sensitvity = 65.5
+  //0x00 for 250  deg/s == > sensitvity = 131.0
+  // Configure Gyro Sensitivity - Full Scale Range (default +/- 250deg/s)
+  Wire.beginTransmission(MPU);
+  Wire.write(0x1B);  // Talk to the GYRO_CONFIG register (1B hex)
+  Wire.write(sen);   // Set the register bits as 00010000 (1000deg/s full scale)
+  Wire.endTransmission(true);
+  delay(20);
+}
+void accel_sensitivity(uint8_t sen) {
+  // Configure Accelerometer Sensitivity - Full Scale Range (default +/- 2g)
+  Wire.beginTransmission(MPU);
+  Wire.write(0x1C);  //Talk to the ACCEL_CONFIG register (1C hex)
+  Wire.write(sen);   //Set the register bits as 00010000 (+/- 8g full scale range)
+  Wire.endTransmission(true);
+  delay(20);
 }
